@@ -90,15 +90,17 @@ def diplay_ycb(base_dir, models, index, scale = 1):
     plt.show()
     return value, boxes, img_color, depth_img, semantic
 
-def read_pointxyz(cat, data_dir):
+def read_pointxyz(cat_dir):
     cld = {}
-    cat_dir = os.path.join(data_dir, "{}_ycb/models".format(cat))
     for dr in [i for i in os.listdir(cat_dir) if i.isdigit()]:
         points = []
         with open(os.path.join(cat_dir, dr, "points.xyz"), "r") as f:
             for i in f:
                 points.append([float(j) for j in i.strip().split(" ")])
-        cld[dr] = np.array(points)
+
+        points = np.array(points)
+        # points[:,2] *= -1
+        cld[dr] = points
     return cld
 
 def diplay_gen_ycb(cat, data_dir, models, model_index,  index, do_scale = False):
@@ -136,14 +138,14 @@ def diplay_gen_ycb(cat, data_dir, models, model_index,  index, do_scale = False)
     plt.show()
     return value, boxes, img_color, depth_img, semantic
 
-def display_load_img(img, depth, boxes, label, cam,  pose_t, pose_r, model_pts):
+def display_load_img(img, depth, boxes, label, cam,  pose_t, pose_r, pose, model_pts):
     fig,axes = plt.subplots(2, 3,  dpi= 100)
     # rt_mat = np.zeros((4, 4))
     # rt_mat[:3,3] = pose_t
     # rt_mat[-1,-1] = 1
-    # rt_mat[:3,:3] = pose_r
+    # pose[:3,2] *= 1
+    # rt_mat[:3,:3] = pose[:3,:3]
     rt_mat = np.matmul(translation_matrix(pose_t), quaternion_matrix(pose_r))
-    print(rt_mat)
 
     point2d = project_to_img(cam, rt_mat[:3,:], model_pts)
     img = np.transpose(img.numpy(), (1,2,0))
@@ -157,4 +159,5 @@ def display_load_img(img, depth, boxes, label, cam,  pose_t, pose_r, model_pts):
     rect1 = patches.Rectangle((boxes[0],boxes[1]),boxes[2] - boxes[0], boxes[3] - boxes[1],linewidth=1,edgecolor='r',facecolor='none')
     axes[1][1].add_patch(rect1)
     axes[1][1].imshow(img)
+    # plt.gca().invert_yaxis()
     plt.show()

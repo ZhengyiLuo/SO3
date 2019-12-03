@@ -96,7 +96,7 @@ def run_epoch(model, loss_fn, loader, optimizer, dtype):
     """
     model.train()
     for i, data in enumerate(loader, 0):
-        img, depth, boxes, label, pose_r, pose_t,  cam,idx= data
+        img, depth, boxes, label, pose_r, pose_t, pose, cam,idx= data
         x_var = Variable(img.type(dtype))
         y_var = Variable(pose_r.type(dtype).float())
 
@@ -117,7 +117,7 @@ def check_accuracy(model, loader, dtype):
     model.eval()
     num_correct, num_samples = 0, 0
     for i, data in enumerate(loader, 0):
-        img, depth, boxes, label, pose_r, pose_t,  cam,idx= data
+        img, depth, boxes, label, pose_r, pose_t, pose, cam,idx= data
         # Cast the image data to the correct type and wrap it in a Variable. At
         # test-time when we do not need to compute gradients, marking the Variable
         # as volatile can reduce memory usage and slightly improve speed.

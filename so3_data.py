@@ -19,15 +19,6 @@ import quaternion as qua
 
 input_size = 128
 
-def read_pointxyz(cat_dir):
-    cld = {}
-    for dr in [i for i in os.listdir(cat_dir) if i.isdigit()]:
-        points = []
-        with open(os.path.join(cat_dir, dr, "points.xyz"), "r") as f:
-            for i in f:
-                points.append([float(j) for j in i.strip().split(" ")])
-        cld[dr] = np.array(points)
-    return cld
 
 class PoseDataset(data.Dataset):
     def __init__(self, mode, root, transforms=None):
@@ -67,8 +58,10 @@ class PoseDataset(data.Dataset):
         cmin, rmin, cmax, rmax = [int(i) for i in boxes[0]]
         cam = meta['intrinsic_matrix']
         
-        target_r, _ = np.linalg.qr(meta['poses'][:, :, idx][:, :3])
-        target_r = qua.as_float_array(qua.from_rotation_matrix(target_r))
+        pose = meta['poses'][:, :, idx][:,:3]
+        pose[:, 2] *= -1
+        target_r = qua.as_float_array(qua.from_rotation_matrix(pose))
+        
         # target_r= meta['poses'][:, :, idx][:, :3]
 
         target_t = np.array([meta['poses'][:, :, idx][:, 3:4].flatten()])
@@ -84,6 +77,7 @@ class PoseDataset(data.Dataset):
                torch.from_numpy(label.astype(np.float32)), \
                torch.from_numpy(target_r.astype(np.float32)), \
                torch.from_numpy(target_t.astype(np.float32)), \
+               torch.from_numpy(pose.astype(np.float32)), \
                torch.from_numpy(cam.astype(np.float32)), \
                model_id
 
