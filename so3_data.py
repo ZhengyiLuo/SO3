@@ -57,28 +57,11 @@ class PoseDataset(data.Dataset):
         boxes = meta['box']
         cmin, rmin, cmax, rmax = [int(i) for i in boxes[0]]
         cam = meta['intrinsic_matrix']
-<<<<<<< HEAD
         
         pose = meta['poses'][:, :, idx][:,:3]
         pose[:, 2] *= -1
         target_r = qua.as_float_array(qua.from_rotation_matrix(pose))
         
-=======
-
-        print("meta['poses'][:, :, idx]:")
-        print(meta['poses'][:, :, idx])
-        target_r, _ = np.linalg.qr(meta['poses'][:, :, idx][:, :3])
-        print("R")
-        print(_)
-        target_r *= np.sign(np.diag(_).reshape((1, 3)))
-        # target_r = meta['poses'][:, :, idx][:, :3]
-        print("target_r mat:")
-        print(target_r)
-        target_r = qua.as_float_array(qua.from_rotation_matrix(target_r))
-        print("target_r quat:")
-        print(target_r)
-
->>>>>>> 5ccb0e129d30d451369241c0a0a8cb21598e76d3
         # target_r= meta['poses'][:, :, idx][:, :3]
 
         target_t = np.array([meta['poses'][:, :, idx][:, 3:4].flatten()])
