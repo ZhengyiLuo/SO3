@@ -140,12 +140,11 @@ def diplay_gen_ycb(cat, data_dir, models, model_index,  index, do_scale = False)
 
 def display_load_img(img, depth, boxes, label, cam,  pose_t, pose_r, pose, model_pts):
     fig,axes = plt.subplots(2, 3,  dpi= 100)
-    # rt_mat = np.zeros((4, 4))
-    # rt_mat[:3,3] = pose_t
-    # rt_mat[-1,-1] = 1
-    # pose[:3,2] *= 1
-    # rt_mat[:3,:3] = pose[:3,:3]
-    rt_mat = np.matmul(translation_matrix(pose_t), quaternion_matrix(pose_r))
+    rt_mat = np.zeros((4, 4))
+    rt_mat[:3,3] = pose_t
+    rt_mat[-1,-1] = 1
+    rt_mat[:3,:3] = pose[:3,:3]
+    # rt_mat = np.matmul(translation_matrix(pose_t), quaternion_matrix(pose_r))
 
     point2d = project_to_img(cam, rt_mat[:3,:], model_pts)
     img = np.transpose(img.numpy(), (1,2,0))
