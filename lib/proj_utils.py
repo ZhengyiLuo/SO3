@@ -10,6 +10,7 @@ from PIL import Image
 import os
 import scipy.io as sio
 from collections import OrderedDict 
+from lib.transformations import translation_matrix, quaternion_matrix, quaternion_from_matrix
 
 camear_matrix = np.array([[1465.8411,    0.0000, 64.0000],[0.0000, 1465.8411, 64.0000],[0.0000,    0.0000,  1.0000]])
 def get_meta(meta_file):
@@ -29,8 +30,7 @@ def project_to_img(camear_matrix, rt, points, scale = 1):
     point3d[:3,:] *= scale
     P = np.matmul(camear_matrix, rt) 
     point3d = np.matmul(P, point3d)
-    np.divide(point3d[0,:], point3d[2,:], point3d[0,:])
-    np.divide(point3d[1,:], point3d[2,:], point3d[1,:])
+    point3d[0:2,:] = np.divide(point3d[0:2,:], point3d[2,:], )
     point2d = point3d[:2,:]
     return point2d
 
@@ -135,3 +135,26 @@ def diplay_gen_ycb(cat, data_dir, models, model_index,  index, do_scale = False)
     x = value
     plt.show()
     return value, boxes, img_color, depth_img, semantic
+
+def display_load_img(img, depth, boxes, label, cam,  pose_t, pose_r, model_pts):
+    fig,axes = plt.subplots(2, 3,  dpi= 100)
+    # rt_mat = np.zeros((4, 4))
+    # rt_mat[:3,3] = pose_t
+    # rt_mat[-1,-1] = 1
+    # rt_mat[:3,:3] = pose_r
+    rt_mat = np.matmul(translation_matrix(pose_t), quaternion_matrix(pose_r))
+    print(rt_mat)
+
+    point2d = project_to_img(cam, rt_mat[:3,:], model_pts)
+    img = np.transpose(img.numpy(), (1,2,0))
+    axes[0][0].imshow(img)
+    
+    axes[0][1].imshow(depth, cmap="gray")
+    
+    axes[0][2].imshow(label)
+    axes[1][0].imshow(img)
+    axes[1][0].scatter(np.asarray(point2d[0,:]), np.asarray(point2d[1,:]), s=20, alpha=0.05)
+    rect1 = patches.Rectangle((boxes[0],boxes[1]),boxes[2] - boxes[0], boxes[3] - boxes[1],linewidth=1,edgecolor='r',facecolor='none')
+    axes[1][1].add_patch(rect1)
+    axes[1][1].imshow(img)
+    plt.show()

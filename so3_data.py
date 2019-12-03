@@ -100,24 +100,3 @@ class PoseDataset(data.Dataset):
             return self.num_pt_mesh_small
 
         
-def display_load_img(img, depth, boxes, label, cam,  pose_t, pose_r, model_pts):
-    fig,axes = plt.subplots(2, 3,  dpi= 100)
-    rt_mat = np.zeros((4, 4))
-    rt_mat[:3,3] = pose_t
-    rt_mat[-1,-1] = 1
-    rt_mat[:3,:3] = pose_r
-    print(rt_mat)
-
-    point2d = project_to_img(cam, rt_mat[:3,:], model_pts)
-    img = np.transpose(img.numpy(), (1,2,0))
-    axes[0][0].imshow(img)
-    
-    axes[0][1].imshow(depth, cmap="gray")
-    
-    axes[0][2].imshow(label)
-    axes[1][0].imshow(img)
-    axes[1][0].scatter(np.asarray(point2d[0,:]), np.asarray(point2d[1,:]), s=20, alpha=0.05)
-    rect1 = patches.Rectangle((boxes[0],boxes[1]),boxes[2] - boxes[0], boxes[3] - boxes[1],linewidth=1,edgecolor='r',facecolor='none')
-    axes[1][1].add_patch(rect1)
-    axes[1][1].imshow(img)
-    plt.show()
