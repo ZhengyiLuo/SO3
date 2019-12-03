@@ -14,7 +14,7 @@ parser.add_argument('--batch_size', default=32, type=int)
 parser.add_argument('--num_workers', default=4, type=int)
 parser.add_argument('--num_epochs1', default=10, type=int)
 parser.add_argument('--num_epochs2', default=10, type=int)
-parser.add_argument('--dataset_root', default="/hdd/zen/dev/6dof/6dof_data/car_ycb", type=str)
+parser.add_argument('--dataset_root', default="data/car_ycb", type=str)
 parser.add_argument('--use_gpu', action='store_true')
 parser.add_argument("--rot_repr", type=str, default="quat", choices=["quat", "mat", "bbox", "rodr"], 
                     help="The type of rotation representation the network output")
