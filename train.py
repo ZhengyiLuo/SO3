@@ -1,78 +1,143 @@
-"""General-purpose training script for image-to-image translation.
+import argparse
+import torch
+import torch.nn as nn
+from torch.autograd import Variable
+from torch.utils.data import DataLoader
 
-This script works for various models (with option '--model': e.g., pix2pix, cyclegan, colorization) and
-different datasets (with option '--dataset_mode': e.g., aligned, unaligned, single, colorization).
-You need to specify the dataset ('--dataroot'), experiment name ('--name'), and model ('--model').
+import torchvision
+import torchvision.transforms as T
+from torchvision.datasets import ImageFolder
+from so3_data import *
 
-It first creates model, dataset, and visualizer given the option.
-It then does standard network training. During the training, it also visualize/save the images, print/save the loss plot, and save models.
-The script supports continue/resume training. Use '--continue_train' to resume your previous training.
+parser = argparse.ArgumentParser()
+parser.add_argument('--batch_size', default=32, type=int)
+parser.add_argument('--num_workers', default=4, type=int)
+parser.add_argument('--num_epochs1', default=10, type=int)
+parser.add_argument('--num_epochs2', default=10, type=int)
+parser.add_argument('--dataset_root', default="/hdd/zen/dev/6dof/6dof_data/car_ycb", type=str)
+parser.add_argument('--use_gpu', action='store_true')
+parser.add_argument("--rot_repr", type=str, default="quat", choices=["quat", "mat", "bbox", "rodr"], 
+                    help="The type of rotation representation the network output")
 
-Example:
-    Train a CycleGAN model:
-        python train.py --dataroot ./datasets/maps --name maps_cyclegan --model cycle_gan
-    Train a pix2pix model:
-        python train.py --dataroot ./datasets/facades --name facades_pix2pix --model pix2pix --direction BtoA
+DIM_OUTPUT = {
+        "quat": 4,
+        "mat": 9,
+        "bbox": 24,
+        "rodr": 3,
+}
 
-See options/base_options.py and options/train_options.py for more training options.
-See training and test tips at: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/docs/tips.md
-See frequently asked questions at: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/docs/qa.md
-"""
-import time
-from options.train_options import TrainOptions
-from data import create_dataset
-from models import create_model
-from util.visualizer import Visualizer
+def main(args):
+    dtype = torch.FloatTensor
+    if args.use_gpu:
+        dtype = torch.cuda.FloatTensor
+
+    # training dataset
+    transform = T.Compose([
+        # T.Scale(224),
+        T.ToTensor(),
+        T.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+    ])
+    dataset_root = args.dataset_root
+    train_dataset = PoseDataset('train', dataset_root, transforms=transform)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1)
+
+    val_dset = PoseDataset('test', dataset_root, transforms=transform)
+    val_loader = torch.utils.data.DataLoader(val_dset, batch_size=args.batch_size, shuffle=True, num_workers=1)
+
+    # model
+    model = torchvision.models.resnet18(pretrained=True)
+
+    dim_output = DIM_OUTPUT[args.rot_repr]
+    model.fc = nn.Linear(model.fc.in_features, dim_output)
+
+    model.type(dtype)
+
+    for param in model.parameters():
+        param.requires_grad = False
+    for param in model.fc.parameters():
+        param.requires_grad = True
+
+
+    # loss and optimizer
+    loss_fn = nn.L1Loss().type(dtype)
+    optimizer = torch.optim.Adam(model.fc.parameters(), lr=1e-3)
+
+    for epoch in range(args.num_epochs1):
+        # Run an epoch over the training data.
+        print('Starting epoch %d / %d' % (epoch + 1, args.num_epochs1))
+        run_epoch(model, loss_fn, train_loader, optimizer, dtype)
+
+        # Check accuracy on the train and val sets.
+        train_acc = check_accuracy(model, train_loader, dtype)
+        val_acc = check_accuracy(model, val_loader, dtype)
+        print('Train accuracy: ', train_acc)
+        print('Val accuracy: ', val_acc)
+        print()
+
+    for param in model.parameters():
+        param.requires_grad = True
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
+
+    for epoch in range(args.num_epochs2):
+        print('Starting epoch %d / %d' % (epoch + 1, args.num_epochs2))
+        run_epoch(model, loss_fn, train_loader, optimizer, dtype)
+
+        train_acc = check_accuracy(model, train_loader, dtype)
+        val_acc = check_accuracy(model, val_loader, dtype)
+        print('Train accuracy: ', train_acc)
+        print('Val accuracy: ', val_acc)
+        print()
+
+
+def run_epoch(model, loss_fn, loader, optimizer, dtype):
+    """
+    Train the model for one epoch.
+    """
+    model.train()
+    for i, data in enumerate(loader, 0):
+        img, depth, boxes, label, pose_r, pose_t,  cam,idx= data
+        x_var = Variable(img.type(dtype))
+        y_var = Variable(pose_r.type(dtype).float())
+
+        # Run the model forward to compute scores and loss.
+        scores = model(x_var)
+        loss = loss_fn(scores, y_var)
+        # Run the model backward and take a step using the optimizer.
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+
+def check_accuracy(model, loader, dtype):
+    """
+    Check the accuracy of the model.
+    """
+    # Set the model to eval mode
+    model.eval()
+    num_correct, num_samples = 0, 0
+    for i, data in enumerate(loader, 0):
+        img, depth, boxes, label, pose_r, pose_t,  cam,idx= data
+        # Cast the image data to the correct type and wrap it in a Variable. At
+        # test-time when we do not need to compute gradients, marking the Variable
+        # as volatile can reduce memory usage and slightly improve speed.
+        x_var = Variable(img.type(dtype))
+        y_var = Variable(pose_r.type(dtype).float())
+
+        # Run the model forward, and compare the argmax score with the ground-truth
+        # category.
+        scores = model(x_var)
+        preds = scores.data.cpu()
+
+        # num_correct += (preds == y_var).sum()
+        num_correct += torch.abs(preds - y_var).sum()
+        num_samples += x_var.shape[0]
+
+    # Return the fraction of datapoints that were correctly classified.
+    acc = float(num_correct) / num_samples
+    return acc
+
 
 if __name__ == '__main__':
-    opt = TrainOptions().parse()   # get training options
-    dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
-    dataset_size = len(dataset)    # get the number of images in the dataset.
-    print('The number of training images = %d' % dataset_size)
-
-    model = create_model(opt)      # create a model given opt.model and other options
-    model.setup(opt)               # regular setup: load and print networks; create schedulers
-    visualizer = Visualizer(opt)   # create a visualizer that display/save images and plots
-    total_iters = 0                # the total number of training iterations
-
-    for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):    # outer loop for different epochs; we save the model by <epoch_count>, <epoch_count>+<save_latest_freq>
-        epoch_start_time = time.time()  # timer for entire epoch
-        iter_data_time = time.time()    # timer for data loading per iteration
-        epoch_iter = 0                  # the number of training iterations in current epoch, reset to 0 every epoch
-        visualizer.reset()              # reset the visualizer: make sure it saves the results to HTML at least once every epoch
-
-        for i, data in enumerate(dataset):  # inner loop within one epoch
-            iter_start_time = time.time()  # timer for computation per iteration
-            if total_iters % opt.print_freq == 0:
-                t_data = iter_start_time - iter_data_time
-
-            total_iters += opt.batch_size
-            epoch_iter += opt.batch_size
-            model.set_input(data)         # unpack data from dataset and apply preprocessing
-            model.optimize_parameters()   # calculate loss functions, get gradients, update network weights
-
-            if total_iters % opt.display_freq == 0:   # display images on visdom and save images to a HTML file
-                save_result = total_iters % opt.update_html_freq == 0
-                model.compute_visuals()
-                visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
-
-            if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
-                losses = model.get_current_losses()
-                t_comp = (time.time() - iter_start_time) / opt.batch_size
-                visualizer.print_current_losses(epoch, epoch_iter, losses, t_comp, t_data)
-                if opt.display_id > 0:
-                    visualizer.plot_current_losses(epoch, float(epoch_iter) / dataset_size, losses)
-
-            if total_iters % opt.save_latest_freq == 0:   # cache our latest model every <save_latest_freq> iterations
-                print('saving the latest model (epoch %d, total_iters %d)' % (epoch, total_iters))
-                save_suffix = 'iter_%d' % total_iters if opt.save_by_iter else 'latest'
-                model.save_networks(save_suffix)
-
-            iter_data_time = time.time()
-        if epoch % opt.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
-            print('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
-            model.save_networks('latest')
-            model.save_networks(epoch)
-
-        print('End of epoch %d / %d \t Time Taken: %d sec' % (epoch, opt.niter + opt.niter_decay, time.time() - epoch_start_time))
-        model.update_learning_rate()                     # update learning rates at the end of every epoch.
+    args = parser.parse_args()
+    main(args)
