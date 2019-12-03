@@ -36,12 +36,12 @@ class PoseDataset(data.Dataset):
 
         self.length = len(self.list)
         class_file = open(os.path.join(root,'dataset_config/classes.txt'))
-        
+
         self.models = read_pointxyz(os.path.join(root,'models'))
         print(len(self.list))
 
     def __getitem__(self, index):
-        
+
         try:
             img = np.array(Image.open('{0}/{1}-color.png'.format(self.root, self.list[index])))[:,:,:3]
             depth = np.load(('{0}/{1}-depth.npy'.format(self.root, self.list[index])))
@@ -57,11 +57,28 @@ class PoseDataset(data.Dataset):
         boxes = meta['box']
         cmin, rmin, cmax, rmax = [int(i) for i in boxes[0]]
         cam = meta['intrinsic_matrix']
+<<<<<<< HEAD
         
         pose = meta['poses'][:, :, idx][:,:3]
         pose[:, 2] *= -1
         target_r = qua.as_float_array(qua.from_rotation_matrix(pose))
         
+=======
+
+        print("meta['poses'][:, :, idx]:")
+        print(meta['poses'][:, :, idx])
+        target_r, _ = np.linalg.qr(meta['poses'][:, :, idx][:, :3])
+        print("R")
+        print(_)
+        target_r *= np.sign(np.diag(_).reshape((1, 3)))
+        # target_r = meta['poses'][:, :, idx][:, :3]
+        print("target_r mat:")
+        print(target_r)
+        target_r = qua.as_float_array(qua.from_rotation_matrix(target_r))
+        print("target_r quat:")
+        print(target_r)
+
+>>>>>>> 5ccb0e129d30d451369241c0a0a8cb21598e76d3
         # target_r= meta['poses'][:, :, idx][:, :3]
 
         target_t = np.array([meta['poses'][:, :, idx][:, 3:4].flatten()])
@@ -70,7 +87,7 @@ class PoseDataset(data.Dataset):
         cam_scale = meta['factor_depth'][0][0]
         if self.transforms:
             img = self.transforms(img)
-        
+
         return img, \
                torch.from_numpy(depth.astype(np.float32)), \
                torch.from_numpy(boxes.astype(np.float32)), \
@@ -92,5 +109,3 @@ class PoseDataset(data.Dataset):
             return self.num_pt_mesh_large
         else:
             return self.num_pt_mesh_small
-
-        
