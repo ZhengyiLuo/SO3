@@ -54,8 +54,8 @@ class PoseDataset(data.Dataset):
         model_id = meta['model_id'][0]
         model_points = self.models[model_id]
         idx = np.random.randint(0, len(obj))
-        boxes = meta['box']
-        cmin, rmin, cmax, rmax = [int(i) for i in boxes[0]]
+        boxes2d = meta['box2d']
+        boxes3d = meta['box3d']
         cam = meta['intrinsic_matrix']
 
         pose = meta['poses'][:, :, idx]
@@ -73,7 +73,8 @@ class PoseDataset(data.Dataset):
 
         return img, \
                torch.from_numpy(depth.astype(np.float32)), \
-               torch.from_numpy(boxes.astype(np.float32)), \
+               torch.from_numpy(boxes2d.astype(np.float32)), \
+               torch.from_numpy(boxes3d.astype(np.float32)), \
                torch.from_numpy(label.astype(np.float32)), \
                torch.from_numpy(target_r.astype(np.float32)), \
                torch.from_numpy(target_t.astype(np.float32)), \

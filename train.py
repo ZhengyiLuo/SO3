@@ -33,7 +33,7 @@ DIM_OUTPUT = {
 
 cat = "car"
 data_dir = "/hdd/zen/dev/6dof/6dof_data/"
-data_dir = "/home/qiaog/courses/16720B-project/SO3/data"
+# data_dir = "/home/qiaog/courses/16720B-project/SO3/data"
 points_cld = read_pointxyz(os.path.join(data_dir, cat +"_ycb", "models"))
 points = np.matrix.transpose(np.hstack((np.matrix(points_cld["0001"]), np.ones(len(points_cld["0001"])).reshape(-1, 1))))
 
@@ -189,7 +189,7 @@ def run_epoch(model, loss_fn, loader, optimizer, dtype, rot_repr):
     """
     model.train()
     for i, data in enumerate(loader, 0):
-        img, depth, boxes, label, pose_r, pose_t, pose, cam,idx= data
+        img, depth, boxes2d, boxes3d, label, pose_r, pose_t, pose, cam,idx= data
         x_var = Variable(img.type(dtype))
 
         # convert the ground truth quaternion to desired rot_repr
@@ -217,7 +217,7 @@ def compute_distance_loss_avg(model, loader, dtype, rot_repr):
     total_distance, total_loss, num_samples = 0.0, 0.0, 0.0
     avg_dists = []
     for i, data in enumerate(loader, 0):
-        img, depth, boxes, label, pose_r, pose_t, pose, cam,idx= data
+        img, depth, boxes2d, boxes3d, label, pose_r, pose_t, pose, cam,idx= data
         x_var = Variable(img.type(dtype))
         y_var = Variable(pose_r.type(dtype).float())
 

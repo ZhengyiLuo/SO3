@@ -111,7 +111,7 @@ def diplay_gen_ycb(cat, data_dir, models, model_index,  index, do_scale = False)
 
     scale = value["scale"][0][0]
     fig,axes = plt.subplots(2, 3,  dpi= 150)
-    boxes = value['box']
+    boxes = value['box2d']
     axes[0][0].imshow(img_color)
     img = cv2.normalize(depth_img, dst=None, alpha=0, beta=65535, norm_type=cv2.NORM_MINMAX)
     axes[0][1].imshow(img, cmap="gray")
