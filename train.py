@@ -17,7 +17,7 @@ parser.add_argument('--batch_size', default=32, type=int)
 parser.add_argument('--num_workers', default=4, type=int)
 parser.add_argument('--num_epochs1', default=10, type=int)
 parser.add_argument('--num_epochs2', default=10, type=int)
-parser.add_argument('--dataset_root', default="data/car_ycb", type=str)
+parser.add_argument('--dataset_root', default="data/car_ycb_bk", type=str)
 parser.add_argument('--use_gpu', action='store_true')
 parser.add_argument("--rot_repr", type=str, default="quat", choices=["quat", "mat", "bbox", "rodr", "euler"],
                     help="The type of rotation representation the network output")
@@ -32,9 +32,9 @@ DIM_OUTPUT = {
 }
 
 cat = "car"
-data_dir = "/hdd/zen/dev/6dof/6dof_data/"
-# data_dir = "/home/qiaog/courses/16720B-project/SO3/data"
-points_cld = read_pointxyz(os.path.join(data_dir, cat +"_ycb", "models"))
+# data_dir = "/hdd/zen/dev/6dof/6dof_data/"
+data_dir = "/home/qiaog/courses/16720B-project/SO3/data"
+points_cld = read_pointxyz(os.path.join(data_dir, cat +"_ycb_bk", "models"))
 points = np.matrix.transpose(np.hstack((np.matrix(points_cld["0001"]), np.ones(len(points_cld["0001"])).reshape(-1, 1))))
 
 '''
@@ -81,7 +81,7 @@ def quatToRotRepr(quat, rot_repr, boxes):
     else:
         raise ValueError("Unknown rot_repr: %s" % rot_repr)
 
-def rotReprToRotMat(input, rot_repr):
+def rotReprToRotMat(input, rot_repr, boxes_gt):
     if rot_repr == "quat":
         R = quaternion_matrix(input)[:3, :3]
     elif rot_repr == "mat":
@@ -190,12 +190,14 @@ def run_epoch(model, loss_fn, loader, optimizer, dtype, rot_repr):
     model.train()
     for i, data in enumerate(loader, 0):
         img, depth, boxes2d, boxes3d, label, pose_r, pose_t, pose, cam,idx= data
+        print("boxes3d.shapeboxes3d:")
+        print(boxes3d.shapeboxes3d)
         x_var = Variable(img.type(dtype))
 
         # convert the ground truth quaternion to desired rot_repr
         target = []
         for quat in pose_r:
-            target.append(quatToRotRepr(quat, rot_repr, boxes))
+            target.append(quatToRotRepr(quat, rot_repr, boxes3d))
         target = np.stack(target, axis=0)
         target = torch.from_numpy(target.astype(np.float32))
         y_var = Variable(target.type(dtype).float())
@@ -226,7 +228,7 @@ def compute_distance_loss_avg(model, loader, dtype, rot_repr):
         preds = scores.data.cpu()
         for i in range(preds.shape[0]):
             # compute the average distance over all points
-            rot1 = rotReprToRotMat(preds[i], rot_repr)
+            rot1 = rotReprToRotMat(preds[i], rot_repr, boxes_gt=boxes3d)
             rot2 = quaternion_matrix(pose_r[i])
             dist = comp_rotation(points, rot1, rot2)
             avg_dists.append(dist)

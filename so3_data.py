@@ -54,6 +54,7 @@ class PoseDataset(data.Dataset):
         model_id = meta['model_id'][0]
         model_points = self.models[model_id]
         idx = np.random.randint(0, len(obj))
+        print(meta.keys())
         boxes2d = meta['box2d']
         boxes3d = meta['box3d']
         cam = meta['intrinsic_matrix']
