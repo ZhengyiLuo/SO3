@@ -57,11 +57,11 @@ class PoseDataset(data.Dataset):
         boxes = meta['box']
         cmin, rmin, cmax, rmax = [int(i) for i in boxes[0]]
         cam = meta['intrinsic_matrix']
-        
+
         pose = meta['poses'][:, :, idx]
         pose[:, 2] *= -1
         target_r = qua.as_float_array(qua.from_rotation_matrix(pose))
-        
+
         # target_r= meta['poses'][:, :, idx][:, :3]
 
         target_t = np.array([meta['poses'][:, :, idx][:, 3:4].flatten()])
