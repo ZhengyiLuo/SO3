@@ -99,7 +99,6 @@ def read_pointxyz(cat_dir):
                 points.append([float(j) for j in i.strip().split(" ")])
 
         points = np.array(points)
-        # points[:,2] *= -1
         cld[dr] = points
     return cld
 

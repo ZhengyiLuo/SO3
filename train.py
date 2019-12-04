@@ -8,6 +8,7 @@ import torchvision
 import torchvision.transforms as T
 from torchvision.datasets import ImageFolder
 from so3_data import *
+from lib.transformations import translation_matrix, quaternion_matrix, quaternion_from_matrix
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', default=32, type=int)
@@ -18,6 +19,7 @@ parser.add_argument('--dataset_root', default="data/car_ycb", type=str)
 parser.add_argument('--use_gpu', action='store_true')
 parser.add_argument("--rot_repr", type=str, default="quat", choices=["quat", "mat", "bbox", "rodr"], 
                     help="The type of rotation representation the network output")
+parser.add_argument('--save_path', default="output/quaternion.npy", type=str)
 
 DIM_OUTPUT = {
         "quat": 4,
@@ -25,6 +27,11 @@ DIM_OUTPUT = {
         "bbox": 24,
         "rodr": 3,
 }
+
+cat = "car"
+data_dir = "/hdd/zen/dev/6dof/6dof_data/"
+points_cld = read_pointxyz(os.path.join(data_dir, cat +"_ycb", "models"))
+points = np.matrix.transpose(np.hstack((np.matrix(points_cld["0001"]), np.ones(len(points_cld["0001"])).reshape(-1, 1))))
 
 def main(args):
     dtype = torch.FloatTensor
@@ -70,8 +77,8 @@ def main(args):
         # Check accuracy on the train and val sets.
         train_acc = check_accuracy(model, train_loader, dtype)
         val_acc = check_accuracy(model, val_loader, dtype)
-        print('Train accuracy: ', train_acc)
-        print('Val accuracy: ', val_acc)
+        print('Train Distance: ', train_acc)
+        print('Val Distance: ', val_acc)
         print()
 
     for param in model.parameters():
@@ -85,9 +92,11 @@ def main(args):
 
         train_acc = check_accuracy(model, train_loader, dtype)
         val_acc = check_accuracy(model, val_loader, dtype)
-        print('Train accuracy: ', train_acc)
-        print('Val accuracy: ', val_acc)
+        print('Train Distance: ', train_acc)
+        print('Val Distance: ', val_acc)
         print()
+
+    torch.save(model.state_dict(), args.save_path)
 
 
 def run_epoch(model, loss_fn, loader, optimizer, dtype):
@@ -116,6 +125,7 @@ def check_accuracy(model, loader, dtype):
     # Set the model to eval mode
     model.eval()
     num_correct, num_samples = 0, 0
+    avg_dists = []
     for i, data in enumerate(loader, 0):
         img, depth, boxes, label, pose_r, pose_t, pose, cam,idx= data
         # Cast the image data to the correct type and wrap it in a Variable. At
@@ -128,14 +138,22 @@ def check_accuracy(model, loader, dtype):
         # category.
         scores = model(x_var)
         preds = scores.data.cpu()
+        for i in range(preds.shape[0]):
+            rot1 = quaternion_matrix(preds[i])
+            rot2 = quaternion_matrix(pose_r[i])
+            dist = comp_rotation(points, rot1, rot2)
+            avg_dists.append(dist)
 
-        # num_correct += (preds == y_var).sum()
-        num_correct += torch.abs(preds - y_var).sum()
-        num_samples += x_var.shape[0]
 
     # Return the fraction of datapoints that were correctly classified.
-    acc = float(num_correct) / num_samples
-    return acc
+    avg_dist = np.sum(avg_dists)/len(avg_dists)
+    return avg_dist
+
+def comp_rotation(points, rot1, rot2):
+    pt1_proj = rot1.dot(points)
+    pt2_proj = rot2.dot(points)
+    distance = np.sum(np.linalg.norm(pt1_proj - pt2_proj, axis=0)) / points.shape[1]
+    return distance 
 
 
 if __name__ == '__main__':
