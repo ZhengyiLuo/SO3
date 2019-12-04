@@ -10,6 +10,7 @@ from torchvision.datasets import ImageFolder
 from so3_data import *
 from lib.transformations import translation_matrix, quaternion_matrix, quaternion_from_matrix
 from scipy.spatial.transform import Rotation
+import quaternion as qua
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', default=32, type=int)
@@ -41,12 +42,13 @@ Let the target given by DataLoader always be quaternion
 WHen computing the loss, convert the ground truth to the suitable format
 '''
 
-def normalizeEulerAngle(angle):
-    while angle > np.pi:
-        angle -= 2*np.pi
-    while angle < np.pi:
-        angle += 2*np.pi
-    return angle
+def normalizeEulerAngle(angles):
+    for i in range(angles.shape[0]):
+        while angles[i] > np.pi:
+            angles[i] -= 2*np.pi
+        while angles[i] < -np.pi:
+            angles[i] += 2*np.pi
+    return angles
 
 # The input to the following function is a quaternion in numpy shape
 # And the bounding boxes coordinates
@@ -55,20 +57,28 @@ def quatToRotRepr(quat, rot_repr, boxes):
     if rot_repr == "quat":
         return quat.reshape(-1)
     elif rot_repr == "mat":
-        return rot.as_dcm().reshape(-1)
+        # return rot.as_dcm().reshape(-1)
+        return quaternion_matrix(quat)[:3, :3].reshape(-1)
     elif rot_repr == "bbox":
         return boxes.reshape(-1)
     elif rot_repr == "rodr":
         return rot.as_rotvec().reshape(-1)
     elif rot_repr == "euler":
-        return rot.as_euler('zyx', degrees=False).reshape(-1)
+        angles = rot.as_euler('xyz', degrees=False)
+        angles = normalizeEulerAngle(angles)
+        angles = angles.copy()
+        '''This conversion is good'''
+        # R = quaternion_matrix(quat)[:3, :3]
+        # R1 = rotReprToRotMat(angles, rot_repr)[:3, :3]
+        # print(R-R1)
+        # print(angles.shape)
+        return angles.reshape(-1)
     else:
         raise ValueError("Unknown rot_repr: %s" % rot_repr)
 
 def rotReprToRotMat(input, rot_repr):
     if rot_repr == "quat":
-        rot = Rotation.from_quat(input)
-        R = rot.as_dcm()
+        R = quaternion_matrix(input)[:3, :3]
     elif rot_repr == "mat":
         R = input.reshape((3,3))
         # re-normalize the rotation matrix by QR decomposition
@@ -81,17 +91,18 @@ def rotReprToRotMat(input, rot_repr):
     elif rot_repr == "euler":
         # first normalize the euler angles
         input = input.reshape(-1)
-        for i in range(input.shape[0]):
-            input[i] = normalizeEulerAngle(input[i])
-        rot = Rotation.from_euler("zyx", input, degrees=False)
-        R = rot.as_dcm()
+        input = normalizeEulerAngle(input)
+        rot = Rotation.from_euler("xyz", input, degrees=False)
+        # R = rot.as_dcm()
+        quat = rot.as_quat()
+        R = quaternion_matrix(quat)[:3, :3]
     else:
         raise ValueError("Unknown rot_repr: %s" % rot_repr)
 
     T = np.eye(4)
     T[:3, :3] = R
-    T1 = quaternion_matrix(input)
-    print(R - T1[:3, :3])
+    # T1 = quaternion_matrix(input)
+    # print(np.linalg.inv(R) - T1[:3, :3])
     return T
 
 def main(args):
@@ -190,41 +201,6 @@ def run_epoch(model, loss_fn, loader, optimizer, dtype, rot_repr):
         loss.backward()
         optimizer.step()
 
-def compute_loss_avg(model, loader, dtype, rot_repr):
-    """
-    Check the loss of the model.
-    """
-    # Set the model to eval mode
-    model.eval()
-    total_loss, num_samples = 0, 0
-    for i, data in enumerate(loader, 0):
-        img, depth, boxes, label, pose_r, pose_t, pose, cam,idx= data
-        # Cast the image data to the correct type and wrap it in a Variable. At
-        # test-time when we do not need to compute gradients, marking the Variable
-        # as volatile can reduce memory usage and slightly improve speed.
-        x_var = Variable(img.type(dtype))
-
-        # convert the ground truth quaternion to desired rot_repr
-        target = []
-        for quat in pose_r:
-            target.append(quatToRotRepr(quat, rot_repr, boxes))
-        target = np.stack(target, axis=0)
-        target = torch.from_numpy(target.astype(np.float32))
-        y_var = Variable(target.type(dtype).float())
-        y_var = y_var.data.cpu()
-
-        # Run the model forward, and compare the argmax score with the ground-truth
-        # category.
-        scores = model(x_var)
-        preds = scores.data.cpu()
-
-        total_loss += torch.abs(preds - y_var).sum()
-        num_samples += x_var.shape[0]
-
-    # Return the fraction of datapoints that were correctly classified.
-    avg_loss = float(total_loss) / num_samples
-    return avg_loss
-
 def compute_distance_loss_avg(model, loader, dtype, rot_repr):
     """
     Check the accuracy of the model.
@@ -250,6 +226,7 @@ def compute_distance_loss_avg(model, loader, dtype, rot_repr):
 
             # compute the loss on the network direct output
             target = quatToRotRepr(pose_r[i], rot_repr, boxes)
+            target = torch.from_numpy(target).type(torch.float32)
             total_loss += torch.abs(preds[i] - target).sum()
             num_samples += 1
 
