@@ -62,7 +62,12 @@ def quatToRotRepr(quat, rot_repr, boxes):
     elif rot_repr == "bbox":
         return boxes.reshape(-1)
     elif rot_repr == "rodr":
-        return rot.as_rotvec().reshape(-1)
+        rotvec = rot.as_rotvec().reshape(-1)
+        '''This conversion is good'''
+        # R = quaternion_matrix(quat)[:3, :3]
+        # R1 = rotReprToRotMat(rotvec, rot_repr)[:3, :3]
+        # print(R-R1)
+        return rotvec
     elif rot_repr == "euler":
         angles = rot.as_euler('xyz', degrees=False)
         angles = normalizeEulerAngle(angles)
@@ -87,7 +92,9 @@ def rotReprToRotMat(input, rot_repr):
         raise NotImplementedError("Bboxes To be implemented")
     elif rot_repr == "rodr":
         rot = Rotation.from_rotvec(input)
-        R = rot.as_dcm()
+        # R = rot.as_dcm()
+        quat = rot.as_quat()
+        R = quaternion_matrix(quat)[:3, :3]
     elif rot_repr == "euler":
         # first normalize the euler angles
         input = input.reshape(-1)
