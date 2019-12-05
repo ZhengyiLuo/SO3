@@ -74,7 +74,7 @@ def quatToRotRepr(quat, rot_repr, boxes2d):
     else:
         raise ValueError("Unknown rot_repr: %s" % rot_repr)
 
-def rotReprToRotMat(input, rot_repr, boxes3d, cam):
+def rotReprToRotMat(input, rot_repr, boxes3d, cam, R_gt):
     if rot_repr == "quat":
         R = quaternion_matrix(input)[:3, :3]
     elif rot_repr == "mat":
@@ -83,7 +83,7 @@ def rotReprToRotMat(input, rot_repr, boxes3d, cam):
         R, _ = np.linalg.qr(R)
     elif rot_repr == "bbox":
         boxes2d = input.reshape(8,2).detach().cpu().numpy()
-        boxes3d = boxes3d.numpy()
+        boxes3d = (R_gt.T.dot(boxes3d)).numpy()
         (success, rotation_vector, translation_vector) = cv2.solvePnP(boxes3d, boxes2d, cam.numpy(), np.zeros((4,1)))
         # print(success)
         # print(rotation_vector)
@@ -276,7 +276,7 @@ def compute_distance_loss_avg(model, loader, dtype, rot_repr):
         preds = scores.data.cpu()
         for i in range(preds.shape[0]):
             # compute the average distance over all points
-            rot1 = rotReprToRotMat(preds[i], rot_repr, boxes3d=boxes3d[i], cam=cam[i])
+            rot1 = rotReprToRotMat(preds[i], rot_repr, boxes3d=boxes3d[i], cam=cam[i], R_gt=pose[:, :3])
             rot2 = quaternion_matrix(pose_r[i])
             dist = comp_rotation(points, rot1, rot2)
             avg_dists.append(dist)
