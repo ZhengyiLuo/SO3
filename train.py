@@ -150,6 +150,21 @@ def main(args):
     plot_y = [[], [], [], []]
     plot_name = ["Train distance", "Val distance", "Train loss", "Val loss"]
 
+    print("Epoch 0, before training: ")
+    # Check accuracy on the train and val sets.
+    train_dist, train_loss = compute_distance_loss_avg(model, train_loader, dtype, rot_repr=args.rot_repr)
+    val_dist, val_loss = compute_distance_loss_avg(model, val_loader, dtype, rot_repr=args.rot_repr)
+    print('Train Distance: ', train_dist)
+    print('Val Distance: ', val_dist)
+    print('Train loss: ', train_loss.item())
+    print('Val loss: ', val_loss.item())
+    print()
+    plot_y[0].append(train_dist)
+    plot_y[1].append(val_dist)
+    plot_y[2].append(train_loss.item())
+    plot_y[3].append(val_loss.item())
+    plot_x.append(0)
+
     for epoch in range(args.num_epochs1):
         # Run an epoch over the training data.
         print('Finetuning last layer: epoch %d / %d' % (epoch + 1, args.num_epochs1))
