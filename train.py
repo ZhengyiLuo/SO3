@@ -59,7 +59,7 @@ def rotReprToRotMat(input, rot_repr, cam=None, boxes3d=boxes3d_gt):
     elif rot_repr == "mat":
         R = input.reshape((3,3))
         # re-normalize the rotation matrix by QR decomposition
-        R, _ = np.linalg.qr(R)
+        # R, _ = np.linalg.qr(R)
     elif rot_repr == "bbox":
         boxes2d = input.reshape(8,2).detach().cpu().numpy()
         (success, rotation_vector, translation_vector) = cv2.solvePnP(boxes3d, boxes2d, cam.numpy(), np.zeros((4,1)))
