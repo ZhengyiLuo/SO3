@@ -187,14 +187,18 @@ def main(args):
         plot_y[3].append(val_loss.item())
         plot_x.append(1+epoch+args.num_epochs1)
 
+    # Save the model
     torch.save(model.state_dict(), args.save_path+".npy")
 
-    # Visualize the progress
+    # Save the log
+    np.savez(args.save_path + "_log.npz", plot_x=plot_x, plot_y=plot_y, plot_name=plot_name)
+
+    # Visualize and save the progress
     fig, ax1 = plt.subplots(dpi=300)
     ax1.set_xlabel("Epoch")
     ax1.plot(plot_x, plot_y[0], label=plot_name[0])
     ax1.plot(plot_x, plot_y[1], label=plot_name[1])
-    ax1.set_ylim([0, 2])
+    ax1.set_ylim([0.0, 1.0])
     ax1.set_ylabel("Average distance")
     plt.legend(loc="lower left")
 
@@ -208,7 +212,6 @@ def main(args):
     #     plt.plot(plot_x, y, label = name)
     plt.savefig(args.save_path + ".png")
 
-    np.savez(args.save_path + "_log.npz", plot_x=plot_x, plot_y=plot_y, plot_name=plot_name)
 
 def run_epoch(model, loss_fn, loader, optimizer, dtype, rot_repr):
     """
@@ -254,7 +257,7 @@ def compute_distance_loss_avg(model, loader, dtype, rot_repr):
         preds = scores.data.cpu()
         for i in range(preds.shape[0]):
             # compute the average distance over all points
-            rot1 = rotReprToRotMat(preds[i], rot_repr, boxes3d=boxes3d[i], cam=cam[i])
+            rot1 = rotReprToRotMat(preds[i], rot_repr, cam=cam[i])
             rot2 = quaternion_matrix(pose_r[i])
             dist = comp_rotation(points, rot1, rot2)
             avg_dists.append(dist)
@@ -282,7 +285,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', default=32, type=int)
     parser.add_argument('--num_workers', default=4, type=int)
     parser.add_argument('--num_epochs1', default=10, type=int)
-    parser.add_argument('--num_epochs2', default=10, type=int)
+    parser.add_argument('--num_epochs2', default=30, type=int)
     parser.add_argument('--dataset_root', default="data/car_ycb_big", type=str)
     parser.add_argument('--use_gpu', action='store_true')
     parser.add_argument("--rot_repr", type=str, default="quat", choices=["quat", "mat", "bbox", "rodr", "euler"],
