@@ -54,8 +54,7 @@ class PoseDataset(data.Dataset):
         model_id = meta['model_id'][0]
         model_points = self.models[model_id]
         idx = np.random.randint(0, len(obj))
-        print(meta.keys())
-        boxes2d = meta['box2d']
+        # boxes2d = meta['box2d']
         boxes3d = meta['box3d']
         cam = meta['intrinsic_matrix']
 
@@ -71,6 +70,12 @@ class PoseDataset(data.Dataset):
         cam_scale = meta['factor_depth'][0][0]
         if self.transforms:
             img = self.transforms(img)
+
+        # Project the 3D box coordinates into 2D image
+        # print(boxes3d.shape)
+        boxes2d = project_to_img(cam, pose, boxes3d, cam_scale)
+        boxes2d = boxes2d.T
+        # print(boxes2d.shape)
 
         return img, \
                torch.from_numpy(depth.astype(np.float32)), \
