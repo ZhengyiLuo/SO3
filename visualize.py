@@ -56,13 +56,16 @@ DIM_OUTPUT = {
         "euler": 3
 }
 # rot_repr = "rodr"
-rot_repr = "quat"
+# rot_repr = "quat"
+# rot_repr = "euler"
+rot_repr = "mat"
 model = torchvision.models.resnet18(pretrained=True)
 dim_output = DIM_OUTPUT[rot_repr]
 model.fc = nn.Linear(model.fc.in_features, dim_output)
 model.load_state_dict(torch.load("output/{}.npy".format(rot_repr)))
 
 model.eval()
+# dataset_root = "/hdd/zen/dev/6dof/6dof_data/so3/test/car_ycb/"
 dataset_root = "/hdd/zen/dev/6dof/6dof_data/so3/big/car_ycb/"
 # dataset_root = "/home/qiaog/courses/16720B-project/SO3/data/car_ycb"
 transform=transforms.Compose([transforms.ToTensor()])
@@ -85,7 +88,7 @@ for i, d in enumerate(train_loader, 0):
     res = model(img)
     for i in range(img.shape[0]):
         rot = res[i].detach().numpy()
-        mat = rotReprToRotMat(rot, rot_repr, None, None, None)[:3,:4]
+        mat = rotReprToRotMat(rot, rot_repr)[:3,:4]
         mat[:,3] = pose[i][:,3]
         # print(mat, pose[i])
         img_org = np.transpose(img[i].numpy(), (1,2,0))
@@ -101,4 +104,4 @@ for i, d in enumerate(train_loader, 0):
 
 frames = np.array(frames)
 np.save("frames_{}.npy".format(rot_repr), frames)
-write_vid("test_{}.mp4".format(rot_repr), frames)
+write_vid("train_2_{}.mp4".format(rot_repr), frames)
