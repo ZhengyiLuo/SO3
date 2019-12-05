@@ -35,8 +35,8 @@ DIM_OUTPUT = {
 }
 
 cat = "car"
-# data_dir = "/hdd/zen/dev/6dof/6dof_data/"
-data_dir = "/home/qiaog/courses/16720B-project/SO3/data"
+data_dir = "/hdd/zen/dev/6dof/SO3/data"
+# data_dir = "/home/qiaog/courses/16720B-project/SO3/data"
 points_cld = read_pointxyz(os.path.join(data_dir, cat +"_ycb_big", "models"))
 points = np.matrix.transpose(np.hstack((np.matrix(points_cld["0000"]), np.ones(len(points_cld["0000"])).reshape(-1, 1))))
 
