@@ -15,30 +15,9 @@ import quaternion as qua
 import matplotlib.pyplot as plt
 import cv2
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', default=32, type=int)
-parser.add_argument('--num_workers', default=4, type=int)
-parser.add_argument('--num_epochs1', default=10, type=int)
-parser.add_argument('--num_epochs2', default=10, type=int)
-parser.add_argument('--dataset_root', default="data/car_ycb_big", type=str)
-parser.add_argument('--use_gpu', action='store_true')
-parser.add_argument("--rot_repr", type=str, default="quat", choices=["quat", "mat", "bbox", "rodr", "euler"],
-                    help="The type of rotation representation the network output")
-parser.add_argument('--save_path', default="output/quaternion", type=str)
-
-DIM_OUTPUT = {
-        "quat": 4,
-        "mat": 9,
-        "bbox": 16,
-        "rodr": 3,
-        "euler": 3
-}
-
-cat = "car"
-data_dir = "/hdd/zen/dev/6dof/SO3/data"
-# data_dir = "/home/qiaog/courses/16720B-project/SO3/data"
-points_cld = read_pointxyz(os.path.join(data_dir, cat +"_ycb_big", "models"))
-points = np.matrix.transpose(np.hstack((np.matrix(points_cld["0000"]), np.ones(len(points_cld["0000"])).reshape(-1, 1))))
+boxes3d_gt = np.array([[ 0.4068,  0.4068,  0.4068,  0.4068, -0.4068, -0.4068, -0.4068, -0.4068],
+        [ 0.2905, -0.0115, -0.2905,  0.0115,  0.2905, -0.0115, -0.2905,  0.0115],
+        [-0.0115,  0.2905,  0.0115, -0.2905, -0.0115,  0.2905,  0.0115, -0.2905]]).T
 
 '''
 Let the target given by DataLoader always be quaternion
@@ -74,7 +53,7 @@ def quatToRotRepr(quat, rot_repr, boxes2d):
     else:
         raise ValueError("Unknown rot_repr: %s" % rot_repr)
 
-def rotReprToRotMat(input, rot_repr, boxes3d, cam, R_gt):
+def rotReprToRotMat(input, rot_repr, cam=None, boxes3d=boxes3d_gt):
     if rot_repr == "quat":
         R = quaternion_matrix(input)[:3, :3]
     elif rot_repr == "mat":
@@ -83,7 +62,6 @@ def rotReprToRotMat(input, rot_repr, boxes3d, cam, R_gt):
         R, _ = np.linalg.qr(R)
     elif rot_repr == "bbox":
         boxes2d = input.reshape(8,2).detach().cpu().numpy()
-        boxes3d = (R_gt.T.dot(boxes3d)).numpy()
         (success, rotation_vector, translation_vector) = cv2.solvePnP(boxes3d, boxes2d, cam.numpy(), np.zeros((4,1)))
         # print(success)
         # print(rotation_vector)
@@ -209,14 +187,18 @@ def main(args):
         plot_y[3].append(val_loss.item())
         plot_x.append(1+epoch+args.num_epochs1)
 
+    # Save the model
     torch.save(model.state_dict(), args.save_path+".npy")
 
-    # Visualize the progress
+    # Save the log
+    np.savez(args.save_path + "_log.npz", plot_x=plot_x, plot_y=plot_y, plot_name=plot_name)
+
+    # Visualize and save the progress
     fig, ax1 = plt.subplots(dpi=300)
     ax1.set_xlabel("Epoch")
     ax1.plot(plot_x, plot_y[0], label=plot_name[0])
     ax1.plot(plot_x, plot_y[1], label=plot_name[1])
-    ax1.set_ylim([0, 2])
+    ax1.set_ylim([0.0, 1.0])
     ax1.set_ylabel("Average distance")
     plt.legend(loc="lower left")
 
@@ -230,7 +212,6 @@ def main(args):
     #     plt.plot(plot_x, y, label = name)
     plt.savefig(args.save_path + ".png")
 
-    np.savez(args.save_path + "_log.npz", plot_x=plot_x, plot_y=plot_y, plot_name=plot_name)
 
 def run_epoch(model, loss_fn, loader, optimizer, dtype, rot_repr):
     """
@@ -276,7 +257,7 @@ def compute_distance_loss_avg(model, loader, dtype, rot_repr):
         preds = scores.data.cpu()
         for i in range(preds.shape[0]):
             # compute the average distance over all points
-            rot1 = rotReprToRotMat(preds[i], rot_repr, boxes3d=boxes3d[i], cam=cam[i], R_gt=pose[:, :3])
+            rot1 = rotReprToRotMat(preds[i], rot_repr, cam=cam[i])
             rot2 = quaternion_matrix(pose_r[i])
             dist = comp_rotation(points, rot1, rot2)
             avg_dists.append(dist)
@@ -300,5 +281,30 @@ def comp_rotation(points, rot1, rot2):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--batch_size', default=32, type=int)
+    parser.add_argument('--num_workers', default=4, type=int)
+    parser.add_argument('--num_epochs1', default=10, type=int)
+    parser.add_argument('--num_epochs2', default=30, type=int)
+    parser.add_argument('--dataset_root', default="data/car_ycb_big", type=str)
+    parser.add_argument('--use_gpu', action='store_true')
+    parser.add_argument("--rot_repr", type=str, default="quat", choices=["quat", "mat", "bbox", "rodr", "euler"],
+                        help="The type of rotation representation the network output")
+    parser.add_argument('--save_path', default="output/quaternion", type=str)
+
+    DIM_OUTPUT = {
+            "quat": 4,
+            "mat": 9,
+            "bbox": 16,
+            "rodr": 3,
+            "euler": 3
+    }
+
+    cat = "car"
+    # data_dir = "/hdd/zen/dev/6dof/6dof_data/"
+    data_dir = "/home/qiaog/courses/16720B-project/SO3/data"
+    points_cld = read_pointxyz(os.path.join(data_dir, cat +"_ycb_big", "models"))
+    points = np.matrix.transpose(np.hstack((np.matrix(points_cld["0000"]), np.ones(len(points_cld["0000"])).reshape(-1, 1))))
+
     args = parser.parse_args()
     main(args)
