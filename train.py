@@ -100,7 +100,7 @@ def main(args):
         T.ToTensor(),
         T.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
     ])
-    dataset_root = args.dataset_root
+    dataset_root = args.data_dir
     train_dataset = PoseDataset('train', dataset_root, transforms=transform)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1)
 
@@ -219,7 +219,7 @@ def run_epoch(model, loss_fn, loader, optimizer, dtype, rot_repr):
     """
     model.train()
     for i, data in enumerate(loader, 0):
-        img, depth, boxes2d, boxes3d, label, pose_r, pose_t, pose, cam,idx= data
+        img, depth, boxes2d, boxes2d_proj, boxes3d, label, pose_r, pose_t, pose, cam,idx = data
         x_var = Variable(img.type(dtype))
 
         # convert the ground truth quaternion to desired rot_repr
@@ -248,7 +248,7 @@ def compute_distance_loss_avg(model, loader, dtype, rot_repr):
     total_distance, total_loss, num_samples = 0.0, 0.0, 0.0
     avg_dists = []
     for i, data in enumerate(loader, 0):
-        img, depth, boxes2d, boxes3d, label, pose_r, pose_t, pose, cam,idx= data
+        img, depth, boxes2d, boxes2d_proj, boxes3d, label, pose_r, pose_t, pose, cam,idx = data
         x_var = Variable(img.type(dtype))
         y_var = Variable(pose_r.type(dtype).float())
 
@@ -286,11 +286,11 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', default=4, type=int)
     parser.add_argument('--num_epochs1', default=10, type=int)
     parser.add_argument('--num_epochs2', default=30, type=int)
-    parser.add_argument('--dataset_root', default="data/car_ycb_big", type=str)
     parser.add_argument('--use_gpu', action='store_true')
     parser.add_argument("--rot_repr", type=str, default="quat", choices=["quat", "mat", "bbox", "rodr", "euler"],
                         help="The type of rotation representation the network output")
     parser.add_argument('--save_path', default="output/quaternion", type=str)
+    parser.add_argument('--data_dir', default="/hdd/zen/dev/6dof/6dof_data/so3/big/car_ycb/", type=str)
 
     DIM_OUTPUT = {
             "quat": 4,
@@ -300,11 +300,14 @@ if __name__ == '__main__':
             "euler": 3
     }
 
-    cat = "car"
-    # data_dir = "/hdd/zen/dev/6dof/6dof_data/"
-    data_dir = "/home/qiaog/courses/16720B-project/SO3/data"
-    points_cld = read_pointxyz(os.path.join(data_dir, cat +"_ycb_big", "models"))
-    points = np.matrix.transpose(np.hstack((np.matrix(points_cld["0000"]), np.ones(len(points_cld["0000"])).reshape(-1, 1))))
-
     args = parser.parse_args()
+
+    data_dir = args.data_dir
+    # data_dir = "/home/qiaog/courses/16720B-project/SO3/data"
+    points_cld = read_pointxyz(os.path.join(data_dir, "models"))
+    points = np.matrix.transpose(np.hstack((np.matrix(points_cld["0000"]), np.ones(len(points_cld["0000"])).reshape(-1, 1))))
+    if not os.path.isdir(args.save_path):
+        os.makedirs(args.save_path)
+
+    
     main(args)

@@ -54,8 +54,11 @@ class PoseDataset(data.Dataset):
         model_id = meta['model_id'][0]
         model_points = self.models[model_id]
         idx = np.random.randint(0, len(obj))
-        bound_box = meta['box2d']
-        boxes3d = meta['box3d']
+
+        box2d = meta['box2d']
+        box3d = meta['box3d']
+        box2d_proj = meta['box2d_proj']
+
         cam = meta['intrinsic_matrix']
 
         pose = meta['poses'][:, :, idx]
@@ -73,15 +76,13 @@ class PoseDataset(data.Dataset):
 
         # Project the 3D box coordinates into 2D image
         # print(boxes3d.shape)
-        boxes2d = project_to_img(cam, pose, boxes3d, cam_scale)
-        boxes2d = boxes2d.T
         # print(boxes2d.shape)
 
         return img, \
                torch.from_numpy(depth.astype(np.float32)), \
-               torch.from_numpy(bound_box.astype(np.float32)), \
-               torch.from_numpy(boxes2d.astype(np.float32)), \
-               torch.from_numpy(boxes3d.astype(np.float32)), \
+               torch.from_numpy(box2d.astype(np.float32)), \
+               torch.from_numpy(box2d_proj.astype(np.float32)), \
+               torch.from_numpy(box3d.astype(np.float32)), \
                torch.from_numpy(label.astype(np.float32)), \
                torch.from_numpy(target_r.astype(np.float32)), \
                torch.from_numpy(target_t.astype(np.float32)), \
