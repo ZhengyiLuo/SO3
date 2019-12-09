@@ -11,8 +11,103 @@ import os
 import scipy.io as sio
 from collections import OrderedDict
 from lib.transformations import translation_matrix, quaternion_matrix, quaternion_from_matrix
+import quaternion as quat
+from scipy.spatial.transform import Rotation
+from lib.rot_tools import *
 
-camear_matrix = np.array([[1465.8411,    0.0000, 64.0000],[0.0000, 1465.8411, 64.0000],[0.0000,    0.0000,  1.0000]])
+
+boxes3d_gt = np.array([[ 0.4068,  0.4068,  0.4068,  0.4068, -0.4068, -0.4068, -0.4068, -0.4068],
+        [ 0.2905, -0.0115, -0.2905,  0.0115,  0.2905, -0.0115, -0.2905,  0.0115],
+        [-0.0115,  0.2905,  0.0115, -0.2905, -0.0115,  0.2905,  0.0115, -0.2905]]).T
+
+def normalizeEulerAngle(angles):
+    for i in range(angles.shape[0]):
+        while angles[i] > np.pi:
+            angles[i] -= 2*np.pi
+        while angles[i] < -np.pi:
+            angles[i] += 2*np.pi
+    return angles
+
+# The input to the following function is a quaternion in numpy shape
+# And the bounding boxes coordinates
+def quatToRotRepr(quat, rot_repr, input = None):
+    # First generate 
+    rot = Rotation.from_quat(quat.reshape(-1))
+    if rot_repr == "quat":
+        return quat.reshape(-1).numpy()
+    elif rot_repr == "mat":
+        return quaternion_matrix(quat)[:3, :3].reshape(-1)
+    elif rot_repr == "bbox":
+        return input.reshape(-1).numpy()
+    elif rot_repr == "rodr":
+        rotvec = rot.as_rotvec().reshape(-1)
+        return rotvec
+    elif rot_repr == "euler":
+        angles = rot.as_euler('xyz', degrees=False)
+        angles = normalizeEulerAngle(angles)
+        angles = angles.copy()
+        return angles.reshape(-1)
+    else:
+        raise ValueError("Unknown rot_repr: %s" % rot_repr)
+
+def rotReprToRotMat_torch(inputs, rot_repr):
+    if rot_repr == "quat":
+        Rs = compute_rotation_matrix_from_quaternion(inputs)
+    elif rot_repr == "mat":
+        Rs = inputs.reshape((-1, 3,3))
+
+    elif rot_repr == "rodr":
+        # R = quaternion_matrix(quat)[:3, :3]
+
+        pass
+    elif rot_repr == "euler":
+        # first normalize the euler angles
+        input = input.reshape(-1)
+        input = normalizeEulerAngle(input)
+        rot = Rotation.from_euler("xyz", input, degrees=False)
+        quat = rot.as_quat()
+        R = quaternion_matrix(quat)[:3, :3]
+    else:
+        raise ValueError("Unknown rot_repr: %s" % rot_repr)
+
+    return Rs
+
+
+def rotReprToRotMat(input, rot_repr, cam=None, boxes3d=boxes3d_gt):
+    if rot_repr == "quat":
+        R = quaternion_matrix(input)[:3, :3]
+    elif rot_repr == "mat":
+        R = input.reshape((3,3))
+        # re-normalize the rotation matrix by QR decomposition
+        # R, _ = np.linalg.qr(R)
+    elif rot_repr == "bbox":
+        boxes2d = input.reshape(8,2).detach().cpu().numpy()
+        (success, rotation_vector, translation_vector) = cv2.solvePnP(boxes3d, boxes2d, cam.numpy(), np.zeros((4,1)))
+        # print(success)
+        # print(rotation_vector)
+        # print(translation_vector)
+        rot = Rotation.from_rotvec(rotation_vector.reshape(-1))
+        quat = rot.as_quat()
+        R = quaternion_matrix(quat)[:3, :3]
+    elif rot_repr == "rodr":
+        rot = Rotation.from_rotvec(input)
+        quat = rot.as_quat()
+        R = quaternion_matrix(quat)[:3, :3]
+    elif rot_repr == "euler":
+        # first normalize the euler angles
+        input = input.reshape(-1)
+        input = normalizeEulerAngle(input)
+        rot = Rotation.from_euler("xyz", input, degrees=False)
+        quat = rot.as_quat()
+        R = quaternion_matrix(quat)[:3, :3]
+    else:
+        raise ValueError("Unknown rot_repr: %s" % rot_repr)
+
+    T = np.eye(4)
+    T[:3, :3] = R
+    return T
+
+
 def get_meta(meta_file):
     trans = np.matrix([[ 1.,  1., -1.,  1.],
        [-1., -1.,  1., -1.],

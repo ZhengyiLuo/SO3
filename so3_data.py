@@ -16,7 +16,6 @@ from lib.proj_utils import *
 from lib.transformations import translation_matrix, quaternion_matrix, quaternion_from_matrix
 import quaternion as qua
 
-
 input_size = 128
 
 
