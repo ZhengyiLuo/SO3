@@ -50,7 +50,8 @@ def quatToRotRepr(quat, rot_repr, input = None):
     else:
         raise ValueError("Unknown rot_repr: %s" % rot_repr)
 
-def rotReprToRotMat_torch(inputs, rot_repr):
+def rotReprToRotMat(inputs, rot_repr):
+    
     if rot_repr == "quat":
         Rs = compute_rotation_matrix_from_quaternion(inputs)
     elif rot_repr == "mat":
@@ -59,45 +60,42 @@ def rotReprToRotMat_torch(inputs, rot_repr):
         Rs = compute_rotation_matrix_from_Rodriguez(inputs)
     elif rot_repr == "euler":
         Rs = compute_rotation_matrix_from_euler(inputs)
+    elif rot_repr == "6dof":
+        Rs = compute_rotation_matrix_from_ortho6d(inputs)
     else:
         raise ValueError("Unknown rot_repr: %s" % rot_repr)
 
     return Rs
 
 
-def rotReprToRotMat(input, rot_repr, cam=None, boxes3d=boxes3d_gt):
-    if rot_repr == "quat":
-        R = quaternion_matrix(input)[:3, :3]
-    elif rot_repr == "mat":
-        R = input.reshape((3,3))
-        # re-normalize the rotation matrix by QR decomposition
-        # R, _ = np.linalg.qr(R)
-    elif rot_repr == "bbox":
-        boxes2d = input.reshape(8,2).detach().cpu().numpy()
-        (success, rotation_vector, translation_vector) = cv2.solvePnP(boxes3d, boxes2d, cam.numpy(), np.zeros((4,1)))
-        # print(success)
-        # print(rotation_vector)
-        # print(translation_vector)
-        rot = Rotation.from_rotvec(rotation_vector.reshape(-1))
-        quat = rot.as_quat()
-        R = quaternion_matrix(quat)[:3, :3]
-    elif rot_repr == "rodr":
-        rot = Rotation.from_rotvec(input)
-        quat = rot.as_quat()
-        R = quaternion_matrix(quat)[:3, :3]
-    elif rot_repr == "euler":
-        # first normalize the euler angles
-        input = input.reshape(-1)
-        input = normalizeEulerAngle(input)
-        rot = Rotation.from_euler("xyz", input, degrees=False)
-        quat = rot.as_quat()
-        R = quaternion_matrix(quat)[:3, :3]
-    else:
-        raise ValueError("Unknown rot_repr: %s" % rot_repr)
+# def rotReprToRotMat(input, rot_repr, cam=None, boxes3d=boxes3d_gt):
+#     if rot_repr == "quat":
+#         R = quaternion_matrix(input)[:3, :3]
+#     elif rot_repr == "mat":
+#         R = input.reshape((3,3))
+#         # re-normalize the rotation matrix by QR decomposition
+#         # R, _ = np.linalg.qr(R)
+#     elif rot_repr == "bbox":
+#         boxes2d = input.reshape(8,2).detach().cpu().numpy()
+#         (success, rotation_vector, translation_vector) = cv2.solvePnP(boxes3d, boxes2d, cam.numpy(), np.zeros((4,1)))
+#         # print(success)
+#         # print(rotation_vector)
+#         # print(translation_vector)
+#         rot = Rotation.from_rotvec(rotation_vector.reshape(-1))
+#         quat = rot.as_quat()
+#         R = quaternion_matrix(quat)[:3, :3]
+#     elif rot_repr == "rodr":
+#         rot = Rotation.from_rotvec(input)
+#         quat = rot.as_quat()
+#         R = quaternion_matrix(quat)[:3, :3]
+#     elif rot_repr == "euler":
+#         R = compute_rotation_matrix_from_euler(input)
+#     else:
+#         raise ValueError("Unknown rot_repr: %s" % rot_repr)
 
-    T = np.eye(4)
-    T[:3, :3] = R
-    return T
+#     T = np.eye(4)
+#     T[:3, :3] = R
+#     return T
 
 
 def get_meta(meta_file):

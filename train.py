@@ -23,7 +23,8 @@ DIM_OUTPUT = {
             "mat": 9,
             "bbox": 16,
             "rodr": 3,
-            "euler": 3
+            "euler": 3, 
+            "6dof": 6
     }
 
 '''
@@ -38,17 +39,6 @@ class Net_Rot(nn.Module):
         self.ResNet = torchvision.models.resnet18(pretrained=True)
         self.ResNet.fc = nn.Linear(self.ResNet.fc.in_features, dim_output)
         self.rot_repr = rot_repr
-
-        if rot_repr == "quat":
-            pass
-        elif rot_repr == "mat":
-            pass
-        elif rot_repr == "bbox":
-            pass
-        elif rot_repr == "rodr":
-            pass
-        elif rot_repr == "euler":
-            pass
 
     def forward(self, x):
         x = self.ResNet(x)
@@ -234,7 +224,7 @@ def calc_loss(model_output, loss_fn, rot_repr, dtype, gts, loss_type = "regressi
         loss = loss_fn(model_output, y_var)
 
     elif loss_type == "matrot":
-        output_mat = rotReprToRotMat_torch(model_output, rot_repr)
+        output_mat = rotReprToRotMat(model_output, rot_repr)
         loss = loss_fn(output_mat, pose[:,:,:3]) # only comparing rotation part
 
     return loss
@@ -266,16 +256,17 @@ def run_epoch(model, loss_fn, loader, dtype, rot_repr, loss_type = "regression",
             loss.backward()
             optimizer.step()
         else:
-            preds = scores.data.cpu()
-            
-            for i in range(preds.shape[0]):
-                # compute the average distance over all points
-                rot1 = rotReprToRotMat(preds[i], rot_repr, cam=cam[i])
+            preds_rot = rotReprToRotMat(scores, rot_repr)
+            for i in range(preds_rot.shape[0]):
+                rot1 = preds_rot[i].detach().cpu().numpy()
+                rot1_4 = np.eye(4)
+                rot1_4[:3,:3] = rot1
                 rot2 = quaternion_matrix(pose_r[i])
-                dist = compare_rotation(model_points, rot1, rot2)
+                dist = compare_rotation(model_points, rot1_4[:3,:4], rot2[:3,:4])
                 avg_dists.append(dist)
                 num_samples += 1
-    avg_loss = total_loss / i # Divide by unber of epoches for 
+
+    avg_loss = total_loss / len(loader) # Divide by unber of epoches for 
     
     if train:
         return avg_loss
@@ -287,6 +278,7 @@ def compare_rotation(points, rot1, rot2):
     points = np.matrix.transpose(np.hstack((np.matrix(points), np.ones(len(points)).reshape(-1, 1))))
     pt1_proj = rot1.dot(points)
     pt2_proj = rot2.dot(points)
+
     distance = np.sum(np.linalg.norm(pt1_proj - pt2_proj, axis=0)) / points.shape[1]
     return distance
 
@@ -295,10 +287,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch_size', default=16, type=int)
     parser.add_argument('--num_workers', default=4, type=int)
-    parser.add_argument('--num_epochs1', default=10, type=int)
-    parser.add_argument('--num_epochs2', default=30, type=int)
+    parser.add_argument('--num_epochs1', default=20, type=int)
+    parser.add_argument('--num_epochs2', default=50, type=int)
     parser.add_argument('--use_gpu', action='store_true')
-    parser.add_argument("--rot_repr", type=str, default="quat", choices=["quat", "mat", "bbox", "rodr", "euler"],
+    parser.add_argument("--rot_repr", type=str, default="quat", choices=["quat", "mat", "bbox", "rodr", "euler", "6dof"],
                         help="The type of rotation representation the network output")
     parser.add_argument('--save_path', default="output/quaternion", type=str)
     parser.add_argument('--data_dir', default="/hdd/zen/dev/6dof/6dof_data/so3/big/car_ycb/", type=str)

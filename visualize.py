@@ -22,8 +22,9 @@ import quaternion as qua
 from so3_data import *
 import cv2
 from scipy.spatial.transform import Rotation
-from train import rotReprToRotMat
 import matplotlib
+
+GLOBAL_DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def proj_pts_display(pts, cam, pose, img_org):
 
@@ -53,13 +54,6 @@ def write_vid(vid_name, frames):
         out.write(img)
     out.release()
 
-DIM_OUTPUT = {
-        "quat": 4,
-        "mat": 9,
-        "bbox": 16,
-        "rodr": 3,
-        "euler": 3
-}
 
 def visualize_model(rot_repr, model_dir, loader, points, vid_name = "res"):
     matplotlib.use("pdf")
@@ -68,19 +62,26 @@ def visualize_model(rot_repr, model_dir, loader, points, vid_name = "res"):
     from train import Net_Rot
     model = Net_Rot(rot_repr)
     model.load_state_dict(torch.load(os.path.join(model_dir, "model.npy")))
+    model.to(GLOBAL_DEVICE)
 
     counter = 0
     frames = []
     for i, d in enumerate(loader, 0):
         img, depth, boxes2d, boxes2d_8, boxes3d, label, pose_r, pose_t, pose, cam,idx = d
+        img, pose = img.to(GLOBAL_DEVICE), pose.to(GLOBAL_DEVICE)
+        
         res = model(img)
-        for i in range(img.shape[0]):
-            rot = res[i].detach().numpy()
-            mat = rotReprToRotMat(rot, rot_repr)[:3,:4]
-            mat[:,3] = pose[i][:,3]
+        mats = rotReprToRotMat(res, rot_repr)
+
+        for i in range(mats.shape[0]):
+            mat = mats[i].detach().cpu().numpy()
+            mat_4 = np.eye(4)
+            mat_4[:3,:3] = mat
+            
+            mat_4[:3,3] = pose[i][:,3].detach().cpu().numpy()
             # print(mat, pose[i])
-            img_org = np.transpose(img[i].numpy(), (1,2,0))
-            image_from_plot = proj_pts_display(points, cam[i], mat, img_org)
+            img_org = np.transpose(img[i].detach().cpu().numpy(), (1,2,0))
+            image_from_plot = proj_pts_display(points, cam[i], mat_4[:3,:4], img_org)
             frames.append(image_from_plot)
             counter += 1
             # print(image_from_plot.shape)
@@ -111,7 +112,7 @@ if __name__ == "__main__":
 
     cld = read_pointxyz( os.path.join(dataset_root, "models"))    
     points = cld['0000']
-    model_dir = "output/quat_small"
+    model_dir = "output/quat_small_matrot"
     visualize_model(rot_repr, model_dir, test_loader, points, vid_name = "test")
     visualize_model(rot_repr, model_dir, train_loader, points, vid_name = "train")
     
