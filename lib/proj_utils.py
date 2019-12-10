@@ -43,7 +43,7 @@ def quatToRotRepr(quat, rot_repr, input = None):
         rotvec = rot.as_rotvec().reshape(-1)
         return rotvec
     elif rot_repr == "euler":
-        angles = rot.as_euler('xyz', degrees=False)
+        angles = rot.as_euler('xzy', degrees=False)
         angles = normalizeEulerAngle(angles)
         angles = angles.copy()
         return angles.reshape(-1)
@@ -55,18 +55,10 @@ def rotReprToRotMat_torch(inputs, rot_repr):
         Rs = compute_rotation_matrix_from_quaternion(inputs)
     elif rot_repr == "mat":
         Rs = inputs.reshape((-1, 3,3))
-
     elif rot_repr == "rodr":
-        # R = quaternion_matrix(quat)[:3, :3]
-
-        pass
+        Rs = compute_rotation_matrix_from_Rodriguez(inputs)
     elif rot_repr == "euler":
-        # first normalize the euler angles
-        input = input.reshape(-1)
-        input = normalizeEulerAngle(input)
-        rot = Rotation.from_euler("xyz", input, degrees=False)
-        quat = rot.as_quat()
-        R = quaternion_matrix(quat)[:3, :3]
+        Rs = compute_rotation_matrix_from_euler(inputs)
     else:
         raise ValueError("Unknown rot_repr: %s" % rot_repr)
 

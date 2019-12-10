@@ -16,8 +16,15 @@ import quaternion as qua
 import matplotlib.pyplot as plt
 import matplotlib
 import cv2
+from visualize import *
 
-
+DIM_OUTPUT = {
+            "quat": 4,
+            "mat": 9,
+            "bbox": 16,
+            "rodr": 3,
+            "euler": 3
+    }
 
 '''
 Let the target given by DataLoader always be quaternion
@@ -25,8 +32,9 @@ WHen computing the loss, convert the ground truth to the suitable format
 '''
 
 class Net_Rot(nn.Module):
-    def __init__(self, rot_repr, dim_output):
+    def __init__(self, rot_repr):
         super(Net_Rot, self).__init__()
+        dim_output = DIM_OUTPUT[rot_repr]
         self.ResNet = torchvision.models.resnet18(pretrained=True)
         self.ResNet.fc = nn.Linear(self.ResNet.fc.in_features, dim_output)
         self.rot_repr = rot_repr
@@ -99,8 +107,7 @@ def main(args, model_points):
     val_loader = torch.utils.data.DataLoader(val_dset, batch_size=args.batch_size, shuffle=True, num_workers=1)
 
     # model
-    dim_output = DIM_OUTPUT[args.rot_repr]
-    model = Net_Rot(args.rot_repr, dim_output)
+    model = Net_Rot(args.rot_repr)
 
     model.type(dtype)
     model.freeze_prev_layers()
@@ -114,6 +121,7 @@ def main(args, model_points):
     plot_y = [[], [], [], []]
     plot_name = ["Train distance", "Val distance", "Train loss", "Val loss"]
 
+    print("========================================================================")
     print("Epoch 0, before training: ")
     # Check accuracy on the train and val sets.
     
@@ -151,7 +159,8 @@ def main(args, model_points):
         plot_x.append(1+epoch)
 
     model.unfreeze_layers()
-
+    print("========================================================================")
+    print("start training all!!!!!!!!")
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
 
     for epoch in range(args.num_epochs2):
@@ -174,10 +183,10 @@ def main(args, model_points):
         plot_x.append(1+epoch+args.num_epochs1)
 
     # Save the model
-    torch.save(model.state_dict(), args.save_path+".npy")
+    torch.save(model.state_dict(), os.path.join(args.save_path, "model.npy"))
 
     # Save the log
-    np.savez(args.save_path + "_log.npz", plot_x=plot_x, plot_y=plot_y, plot_name=plot_name)
+    np.savez(os.path.join(args.save_path,"log.npy"), plot_x=plot_x, plot_y=plot_y, plot_name=plot_name)
 
     # Visualize and save the progress
     fig, ax1 = plt.subplots(dpi=300)
@@ -196,7 +205,19 @@ def main(args, model_points):
 
     # for y, name in zip(plot_y, plot_name):
     #     plt.plot(plot_x, y, label = name)
-    plt.savefig(args.save_path + ".png")
+    plt.savefig(os.path.join(args.save_path,"model.png"))
+
+    ### Visualization, no transform
+    transform=transforms.Compose([transforms.ToTensor()])
+    train_dataset = PoseDataset('train', dataset_root, transforms=transform)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=8, shuffle=False, num_workers=1)
+
+    test_dataset = PoseDataset('test', dataset_root, transforms=transform)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=8, shuffle=False, num_workers=1)
+
+
+    visualize_model(args.rot_repr, args.save_path, train_loader, model_points, vid_name = "train")
+    visualize_model(args.rot_repr, args.save_path, test_loader, model_points, vid_name = "test")
 
 
 def calc_loss(model_output, loss_fn, rot_repr, dtype, gts, loss_type = "regression"):
@@ -232,6 +253,7 @@ def run_epoch(model, loss_fn, loader, dtype, rot_repr, loss_type = "regression",
     
     for i, data in enumerate(loader, 0):
         img, depth, boxes2d, boxes2d_proj, boxes3d, label, pose_r, pose_t, pose, cam,idx = data
+        
         x_var = Variable(img.type(dtype))
         scores = model(x_var)
 
@@ -261,40 +283,8 @@ def run_epoch(model, loss_fn, loader, dtype, rot_repr, loss_type = "regression",
         avg_dist = np.sum(avg_dists)/len(avg_dists)
         return avg_dist, avg_loss
 
-
-# def compute_distance_loss_avg(model, loader, loss_fn, dtype, rot_repr, loss_type = "regression"):
-#     """
-#     Check the accuracy of the model.
-#     """
-#     # Set the model to eval mode
-#     model.eval()
-#     total_distance, total_loss, num_samples = 0.0, 0.0, 0.0
-#     avg_dists = []
-#     for i, data in enumerate(loader, 0):
-#         img, depth, boxes2d, boxes2d_proj, boxes3d, label, pose_r, pose_t, pose, cam,idx = data
-#         x_var = Variable(img.type(dtype))
-#         y_var = Variable(pose_r.type(dtype).float())
-        
-
-#         # feed into the network
-#         scores = model(x_var)
-#         preds = scores.data.cpu()
-
-#         total_loss += calc_loss(scores, loss_fn, rot_repr, dtype, zip(pose_r, boxes2d)).item()
-#         for i in range(preds.shape[0]):
-#             # compute the average distance over all points
-#             rot1 = rotReprToRotMat(preds[i], rot_repr, cam=cam[i])
-#             rot2 = quaternion_matrix(pose_r[i])
-#             dist = compare_rotation(points, rot1, rot2)
-#             avg_dists.append(dist)
-#             num_samples += 1
-
-#     # Return the fraction of datapoints that were correctly classified.
-#     avg_dist = np.sum(avg_dists)/len(avg_dists)
-#     avg_loss = total_loss / i # Divide by unber of epoches for loss
-#     return avg_dist, avg_loss
-
 def compare_rotation(points, rot1, rot2):
+    points = np.matrix.transpose(np.hstack((np.matrix(points), np.ones(len(points)).reshape(-1, 1))))
     pt1_proj = rot1.dot(points)
     pt2_proj = rot2.dot(points)
     distance = np.sum(np.linalg.norm(pt1_proj - pt2_proj, axis=0)) / points.shape[1]
@@ -314,20 +304,13 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', default="/hdd/zen/dev/6dof/6dof_data/so3/big/car_ycb/", type=str)
     parser.add_argument('--loss_type', default="regression", type=str)
 
-    DIM_OUTPUT = {
-            "quat": 4,
-            "mat": 9,
-            "bbox": 16,
-            "rodr": 3,
-            "euler": 3
-    }
-
     args = parser.parse_args()
 
     data_dir = args.data_dir
     # data_dir = "/home/qiaog/courses/16720B-project/SO3/data"
     points_cld = read_pointxyz(os.path.join(data_dir, "models"))
-    model_points = np.matrix.transpose(np.hstack((np.matrix(points_cld["0000"]), np.ones(len(points_cld["0000"])).reshape(-1, 1))))
+    # model_points = np.matrix.transpose(np.hstack((np.matrix(points_cld["0000"]), np.ones(len(points_cld["0000"])).reshape(-1, 1))))
+    model_points = points_cld["0000"]
     
     if not os.path.isdir(args.save_path):
         os.makedirs(args.save_path)

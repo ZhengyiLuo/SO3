@@ -23,13 +23,18 @@ from so3_data import *
 import cv2
 from scipy.spatial.transform import Rotation
 from train import rotReprToRotMat
+import matplotlib
 
 def proj_pts_display(pts, cam, pose, img_org):
+
     fig, (ax1, ax2) = plt.subplots(1, 2)
     fig.tight_layout(pad=0)
     ax1.axis('square')
     pts2d = project_to_img(cam, pose, pts)
     ax1.scatter(pts2d[0,:], pts2d[1,:], c = (pts[:,2] * 100).astype(int))
+    if np.max(img_org) > 1:
+        img_org = img_org/256
+
     ax2.imshow(img_org)
     ax1.set_xlim(0, 224)
     ax1.set_ylim(0, 224)
@@ -55,53 +60,58 @@ DIM_OUTPUT = {
         "rodr": 3,
         "euler": 3
 }
-# rot_repr = "rodr"
-# rot_repr = "quat"
-# rot_repr = "euler"
-rot_repr = "mat"
-model = torchvision.models.resnet18(pretrained=True)
-dim_output = DIM_OUTPUT[rot_repr]
-model.fc = nn.Linear(model.fc.in_features, dim_output)
-model.load_state_dict(torch.load("output/{}.npy".format(rot_repr)))
 
-model.eval()
-# dataset_root = "/hdd/zen/dev/6dof/6dof_data/so3/test/car_ycb/"
-dataset_root = "/hdd/zen/dev/6dof/6dof_data/so3/big/car_ycb/"
-# dataset_root = "/home/qiaog/courses/16720B-project/SO3/data/car_ycb"
-transform=transforms.Compose([transforms.ToTensor()])
-train_dataset = PoseDataset('train', dataset_root, transforms=transform)
-train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=8, shuffle=False, num_workers=1)
+def visualize_model(rot_repr, model_dir, loader, points, vid_name = "res"):
+    matplotlib.use("pdf")
+    print("========================================================================")
+    print("visualizing model....")
+    from train import Net_Rot
+    model = Net_Rot(rot_repr)
+    model.load_state_dict(torch.load(os.path.join(model_dir, "model.npy")))
 
-test_dataset = PoseDataset('test', dataset_root, transforms=transform)
-test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=8, shuffle=False, num_workers=1)
+    counter = 0
+    frames = []
+    for i, d in enumerate(loader, 0):
+        img, depth, boxes2d, boxes2d_8, boxes3d, label, pose_r, pose_t, pose, cam,idx = d
+        res = model(img)
+        for i in range(img.shape[0]):
+            rot = res[i].detach().numpy()
+            mat = rotReprToRotMat(rot, rot_repr)[:3,:4]
+            mat[:,3] = pose[i][:,3]
+            # print(mat, pose[i])
+            img_org = np.transpose(img[i].numpy(), (1,2,0))
+            image_from_plot = proj_pts_display(points, cam[i], mat, img_org)
+            frames.append(image_from_plot)
+            counter += 1
+            # print(image_from_plot.shape)
+            # plt.imshow(image_from_plot)
+            # plt.show()
+
+        if counter > 50:
+            break
+
+    frames = np.array(frames)
+    # np.save("frames_{}.npy".format(rot_repr), frames)
+    write_vid(os.path.join(model_dir, "{}.mp4".format(vid_name)), frames)
 
 
 
 
-cld = read_pointxyz( os.path.join(dataset_root, "models"))    
+if __name__ == "__main__":
+    rot_repr = "quat"
+    # dataset_root = "/hdd/zen/dev/6dof/6dof_data/so3/test/car_ycb/"
+    dataset_root = "/hdd/zen/dev/6dof/6dof_data/so3/small/car_ycb/"
+    # dataset_root = "/home/qiaog/courses/16720B-project/SO3/data/car_ycb"
+    transform=transforms.Compose([transforms.ToTensor()])
+    train_dataset = PoseDataset('train', dataset_root, transforms=transform)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=8, shuffle=False, num_workers=1)
+
+    test_dataset = PoseDataset('test', dataset_root, transforms=transform)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=8, shuffle=False, num_workers=1)
+
+    cld = read_pointxyz( os.path.join(dataset_root, "models"))    
+    points = cld['0000']
+    model_dir = "output/quat_small"
+    visualize_model(rot_repr, model_dir, test_loader, points, vid_name = "test")
+    visualize_model(rot_repr, model_dir, train_loader, points, vid_name = "train")
     
-counter = 0
-## Data inspection 
-frames = []
-for i, d in enumerate(train_loader, 0):
-    img, depth, boxes2d, boxes2d_8, boxes3d, label, pose_r, pose_t, pose, cam,idx = d
-    res = model(img)
-    for i in range(img.shape[0]):
-        rot = res[i].detach().numpy()
-        mat = rotReprToRotMat(rot, rot_repr)[:3,:4]
-        mat[:,3] = pose[i][:,3]
-        # print(mat, pose[i])
-        img_org = np.transpose(img[i].numpy(), (1,2,0))
-        image_from_plot = proj_pts_display(cld['0000'], cam[i], mat, img_org)
-        frames.append(image_from_plot)
-        counter += 1
-        # print(image_from_plot.shape)
-        # plt.imshow(image_from_plot)
-        # plt.show()
-
-    if counter > 50:
-        break
-
-frames = np.array(frames)
-np.save("frames_{}.npy".format(rot_repr), frames)
-write_vid("train_2_{}.mp4".format(rot_repr), frames)
